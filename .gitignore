@@ -1,8 +1,21 @@
 
+# Environment variables and secrets
 .env
-venv/
+.env.*
+
+# Python
 __pycache__/
-*.pyc
-daily_screenshots/
-static/uploads/
-instance/
+*.py[cod]
+venv/
+.venv/
+
+# Sensitive database backup
+admin_cr_backup.sql
+*.sql
+
+# Local database and logs
+*.log
+
+# IDE
+.vscode/
+.idea/
