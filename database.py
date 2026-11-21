@@ -1,3 +1,7 @@
+
+import os
+from pathlib import Path
+
 import mysql.connector
 from mysql.connector import Error
 from config import Config
@@ -5,11 +9,41 @@ from config import Config
 
 def get_db_connection():
     try:
-        if not Config.DB_HOST or not Config.DB_USER or not Config.DB_PASSWORD:
-            raise ValueError("Database environment variables are missing.")
+        # Check database environment variables
+        if not Config.DB_HOST:
+            raise ValueError("DB_HOST is missing")
 
-        if not Config.DB_SSL_CA:
-            raise ValueError("TiDB SSL CA certificate path is missing.")
+        if not Config.DB_USER:
+            raise ValueError("DB_USER is missing")
+
+        if not Config.DB_PASSWORD:
+            raise ValueError("DB_PASSWORD is missing")
+
+        if not Config.DB_NAME:
+            raise ValueError("DB_NAME is missing")
+
+        # Resolve SSL certificate path for Render and local Windows
+        base_dir = Path(__file__).resolve().parent
+
+        ca_setting = os.getenv("DB_SSL_CA") or Config.DB_SSL_CA
+
+        if not ca_setting:
+            raise ValueError("DB_SSL_CA is missing")
+
+        ca_path = Path(ca_setting)
+
+        if not ca_path.is_absolute():
+            ca_path = base_dir / ca_path
+
+        ca_path = ca_path.resolve()
+
+        if not ca_path.is_file():
+            raise FileNotFoundError(
+                f"SSL certificate not found: {ca_path}"
+            )
+
+        print("Connecting to TiDB Cloud...")
+        print("SSL certificate found:", ca_path)
 
         connection = mysql.connector.connect(
             host=Config.DB_HOST,
@@ -17,19 +51,21 @@ def get_db_connection():
             user=Config.DB_USER,
             password=Config.DB_PASSWORD,
             database=Config.DB_NAME,
-            ssl_ca=Config.DB_SSL_CA,
+            ssl_ca=str(ca_path),
             ssl_verify_cert=True,
             ssl_verify_identity=True,
-            connection_timeout=15
+            connection_timeout=20
         )
 
         if connection.is_connected():
+            print("SUCCESS: TiDB Cloud connected!")
             return connection
 
+        print("Connection was not established.")
         return None
 
-    except (Error, ValueError) as e:
-        print("Database Connection Error:", e)
+    except Exception as e:
+        print("DATABASE CONNECTION ERROR:", repr(e))
         return None
 
 
@@ -43,7 +79,6 @@ def create_tables():
     cursor = connection.cursor()
 
     try:
-        # Users table
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS users (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -60,7 +95,6 @@ def create_tables():
             )
         """)
 
-        # Screenshot submissions
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS submissions (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -75,7 +109,6 @@ def create_tables():
             )
         """)
 
-        # Daily reports
         cursor.execute("""
             CREATE TABLE IF NOT EXISTS daily_reports (
                 id INT AUTO_INCREMENT PRIMARY KEY,
@@ -89,15 +122,12 @@ def create_tables():
         """)
 
         connection.commit()
-
         print("SUCCESS: Database tables created!")
-        print("Tables: users, submissions, daily_reports")
-
         return True
 
     except Error as e:
         connection.rollback()
-        print("Table Creation Error:", e)
+        print("TABLE CREATION ERROR:", repr(e))
         return False
 
     finally:
@@ -109,9 +139,8 @@ if __name__ == "__main__":
     connection = get_db_connection()
 
     if connection:
-        print("SUCCESS: TiDB Cloud Database Connected!")
         connection.close()
-
+        print("SUCCESS: TiDB Cloud Database Connected!")
         create_tables()
     else:
         print("FAILED: Database connection failed!")
