@@ -90,9 +90,12 @@ def home():
 
 
 # Login page
+
 @app.route("/login", methods=["GET", "POST"])
 def login():
+
     if request.method == "POST":
+
         phone = request.form.get("phone", "").strip()
         password = request.form.get("password", "")
 
@@ -108,28 +111,71 @@ def login():
 
         try:
             cursor.execute("""
-                SELECT id, name, phone, password_hash, role, is_active
+                SELECT
+                    id,
+                    name,
+                    phone,
+                    password_hash,
+                    role,
+                    is_active
                 FROM users
                 WHERE phone = %s
             """, (phone,))
 
             user = cursor.fetchone()
 
-            if (
-                user
-                and user["is_active"]
-                and check_password_hash(user["password_hash"], password)
-            ):
-                session.clear()
-                session["user_id"] = user["id"]
-                session["user_name"] = user["name"]
-                session["role"] = user["role"]
+            if not user:
+                return render_template(
+                    "login.html",
+                    error="Invalid phone number or password!"
+                )
 
-                return redirect(url_for("student_upload"))    
+            if not user["is_active"]:
+                return render_template(
+                    "login.html",
+                    error="Your account is inactive!"
+                )
+
+            if not check_password_hash(
+                user["password_hash"], password
+            ):
+                return render_template(
+                    "login.html",
+                    error="Invalid phone number or password!"
+                )
+
+            # Clear old session
+            session.clear()
+
+            # Save user details
+            session["user_id"] = user["id"]
+            session["user_name"] = user["name"]
+            session["role"] = user["role"]
+
+            # Role-based redirect
+            if user["role"] == "admin":
+                return redirect(url_for("admin_dashboard"))
+
+            elif user["role"] == "cr":
+                return redirect(url_for("cr_dashboard"))
+
+            elif user["role"] == "student":
+                return redirect(url_for("student_upload"))
+
+            else:
+                session.clear()
+
+                return render_template(
+                    "login.html",
+                    error="Invalid user role!"
+                )
+
+        except Exception as e:
+            print("LOGIN ERROR:", e)
 
             return render_template(
                 "login.html",
-                error="Invalid phone number or password!"
+                error="Login failed. Please try again!"
             )
 
         finally:

@@ -19,3 +19,5 @@ admin_cr_backup.sql
 # IDE
 .vscode/
 .idea/
+
+daily_screenshots/
